@@ -1,0 +1,325 @@
+---
+title: 'Mobile SMS Spam Detection '
+author: "Durga Gaddam"
+date: "August 25, 2016"
+output: pdf_document
+---
+
+###Objective
+The main objective of this article is to use Navie Bayes Classification algorithm concept in Machine Learning(Supervised Learning) to detect which messages are spam. This algorithm will automatically detect the incoming message by reading the keywords to determine it as spam. 
+
+
+### What is Navie Bayes Classification
+
+This concept uses probability i.e likely hood of happening of an event to categorize data. Conditional probability is mostly used in Navie Bayes classification and is considered as one of the strongest method used for classification learning tasks(Lantz,2015)
+
+Algorithm is a sequence of procedures or rules given to a computer, when followed guarantees the result
+
+In every Machine learning model, five steps are required to complete the model.
+
+####Step-1: Collecting the Data
+####Step-2: Exploring and Preparing the data
+####Step-3: Training a model on the data
+####Step-4: Evaluating model performance
+####Step-5: Improving model perfomance
+
+###Step-1: Collecting the Data
+
+The present data is collected from http://www.dt.fee.unicamp.br/~tiago/smsspamcollection/
+
+#####Description of Data
+
+The extracted data consists of Short Message Services(SMSs) collected from mobile phone users.
+
+#### Ham(Non-spam) examples:
+
+1) *Better. Made up for Friday and stuffed myself like a pig yesterday. Now I feel bleh. But at least its not writhing pain kind of bleh.*
+
+2) *No we sell it all so we\'ll have tons if coins. Then sell our coins to someone thru paypal. Voila! Money back in life pockets:)*
+
+#### Spam examples:
+
+1) *URGENT! We are trying to contact U. Todays draw shows that you have won a £800 prize GUARANTEED. Call 09050001808 from land line. Claim M95. Valid12hrs only',1*
+
+2) *Please call our customer service representative on FREEPHONE 0808 145 4742 between 9am-11pm as you have WON a guaranteed £1000 cash or £5000 prize!*
+
+
+As you can see that the ham messages do not contain any words like 'FREE', 'URGENT' and other Money related excitements, There is a likelyhood that the messages containing these words are spams. And it is less likely that messages with this words are hams.
+
+###Step-2: Exploring and Preparing the data
+
+```{r}
+sms <- read.csv("F:/R PRACTICE/Smsfilter/sms_spam.csv", stringsAsFactors = FALSE)
+
+head(sms,2)
+tail(sms,1)
+
+str(sms)
+
+```
+
+The give data set contains 5559 observations. Each sms is categorized into ham or spam. There are two variables "type" and "text" 
+
+
+```{r}
+
+sapply(sms,class)
+```
+The given variable "type" data is in the form of character vector and needs to be converted into factor variable to get levels.
+```{r}
+
+sms$Type <- as.factor(sms$Type)
+class(sms$Type)
+str(sms$Type)
+table(sms$Type)
+```
+
+####cleaning the data set
+
+Currently the data set is in raw form and needs to be cleaned. Understanding each punctuation mark and word is done using a package called *tm* in R.
+
+```{r}
+###install.packages("tm")
+### library(tm)
+```
+
+### Corpus:
+
+Corpus is a collection of text data or documents, which is a reference of text that we need to understand.
+
+In our context, sms_spam.csv is the data source and a variable needs to be created to read the data and understand it.
+
+The *tm* Packages contains two functions *Vcorpus()* and *Pcorpus()*.  Vcorpus stands for Volatile Corpus is stored in RAM and is temprory, Pcorpus is Permanent Corpus which can be stored in harddisk.*VectorSource()* is another function used to read the data to corpus
+
+```{r}
+require(tm)
+
+sms_corpus <- VCorpus(VectorSource(sms$Text))
+```
+Each text message is stored as a document in Corpus. *tm* contains a function called *inspect()* which is used to summarize the data in required document
+```{r}
+
+inspect(sms_corpus[20])
+as.character(sms_corpus[[20]])
+```
+
+
+####tm_map()
+
+tm_map() function in *tm* package is used to clean the data.
+
+#### Standardizing the data
+
+To standardize the data, all the characters or words are to be converted to lower case, this can be done using a fuction called tolower() to transform this we also use a function called content_transformer(). we also need to remove the numbers, to do this we need to use *removeNumbers* function in *tm*
+
+```{r}
+
+sms_corpus_clean <- tm_map(sms_corpus, content_transformer(tolower))
+
+as.character(sms_corpus[[500]])
+as.character(sms_corpus_clean[[500]])
+
+
+sms_corpus_clean <- tm_map(sms_corpus_clean,removeNumbers)
+
+
+
+as.character(sms_corpus[[5]])
+as.character(sms_corpus_clean[[5]])
+
+```
+
+####StopWords
+
+Stopwords are frequently used words in a language. Here are the list of Stop words. These are to be eliminated from the text before text mining.
+This transformation is done thorugh a function in *tm* called *removeWords*
+
+```{r}
+stopwords()
+
+sms_corpus_clean <- tm_map(sms_corpus_clean,removeWords,stopwords())
+
+as.character(sms_corpus[[5]])
+as.character(sms_corpus_clean[[5]])
+
+sms_corpus_clean <- tm_map(sms_corpus_clean,removePunctuation)
+as.character(sms_corpus_clean[[5]])
+```
+
+####Stemming:
+
+Stemming is reduction of words using root form. Example, "parenting","parents","parent" has a root form of parent(suffix). Every word of this root are converted automatically removed. Stemming is used in R through a package called "SnowballC"
+    
+```{r}
+###install.packages("SnowballC")
+### library(SnowballC)
+
+require(SnowballC)
+wordStem(c("parenting","parents","parent"))
+
+### StemDocument() function is used in transforming the entire corpus text documents
+
+sms_corpus_clean <- tm_map(sms_corpus_clean, stemDocument)
+
+```
+ reducing the white spaces that were created previously by deleting words, numbers and punctuation marks
+```{r}
+sms_corpus_clean <- tm_map(sms_corpus_clean, stripWhitespace)
+
+as.character(sms_corpus[[3]])
+as.character(sms_corpus_clean[[3]])
+```
+
+####Document Term Matrix
+
+This is a process of transformation of tokens. Tokenizing is a process of splitting the message into individual words. In this process, message is termed as number in row and columns contain repeated words.
+    
+```{r}
+sms_dtm <- DocumentTermMatrix(sms_corpus_clean)
+
+### Alternate process
+sms_dtm2 <- DocumentTermMatrix(sms_corpus, control = list(
+                                                    tolower=TRUE,
+                                                    removeNumbers=TRUE,
+                                                    stopwords=TRUE,
+                                                    removePunctuation=TRUE,
+                                                    stemming = TRUE))
+                                                  
+sms_dtm
+sms_dtm2
+```
+The difference in sparse entries is due to the variation in the order. It is recommended to follow the first process rather than alternate process.
+
+```{r}
+
+### Creating test and training sets
+
+sms_dtm_train <- sms_dtm[1:4169,]
+sms_dtm_test <- sms_dtm[4170:5559,]
+
+
+sms_train_labels <- sms[1:4169,]$Type
+sms_test_labels <- sms[4170:5559, ]$Type
+
+prop.table(table(sms_train_labels))
+prop.table(table(sms_test_labels))
+```
+
+
+####Word Cloud
+
+This provides the frequently used words. Word Colud is used to determine the trend in social media websites.
+```{r}
+###install.packages("wordcloud")
+###library(wordcloud)
+require(wordcloud)
+pal2 <- brewer.pal(9,"Set1")
+pal3 <- brewer.pal(8,"Set2")
+
+wordcloud(sms_corpus_clean, min.freq = 50, random.order = FALSE,rot.per=.15, colors=pal2)
+
+spam <- subset(sms,Type=="spam")
+ham <- subset(sms,Type=="ham")
+
+wordcloud(spam$Text,max.words = 40, scale = c(3,0.5), rot.per = 0.2, colors=pal3)
+wordcloud(ham$Text,max.words = 40, scale = c(3,0.5), rot.per = 0.2, colors=pal3)
+
+```
+
+####Using frequently used words for training Data structure
+
+We need to eliminate the words that have appeared in less than 0.1 percent of the records.This can be done through a function called findFreqTerms()
+    
+```{r}
+
+sms_freq_words <- findFreqTerms(sms_dtm_train,5)
+
+sms_dtm_freq_train <- sms_dtm_train[, sms_freq_words]
+
+sms_dtm_freq_test <-  sms_dtm_test[,sms_freq_words]
+
+
+convert_counts<- function(x) {
+  
+  x <- ifelse(x>0,"Yes", "No")
+}
+
+
+sms_train <- apply(sms_dtm_freq_train, MARGIN = 2, convert_counts)
+sms_test <- apply(sms_dtm_freq_test, MARGIN=2, convert_counts)
+
+sms_train[50:55]
+
+```
+
+### Step3- Training The Model
+
+```{r}
+
+###install.packages("e1071")
+###library(e1071)
+
+require(e1071)
+
+sms_classifier <- naiveBayes(sms_train, sms_train_labels)
+
+```
+
+###Step-4 Evaluating Model Perfmance
+
+```{r}
+
+sms_test_pred <- predict(sms_classifier, sms_test)
+
+length(sms_test_pred)
+length(sms_test_labels)
+
+###install.packages("gtools")
+###library(gtools)
+###install.packages("gmodels")
+###library(gmodels)
+require(gmodels)
+
+CrossTable(sms_test_pred, sms_test_labels, prop.chisq = FALSE, prop.t=FALSE, 
+           dnn=c('predicted', 'actual'))
+
+```
+###Step5 Improving Model performance
+
+```{r}
+
+sms_classifier2 <- naiveBayes(sms_train,sms_train_labels, laplace = 2)
+sms_test_pred2 <- predict(sms_classifier2, sms_test)
+CrossTable(sms_test_pred2, sms_test_labels, prop.chisq = FALSE, prop.t=FALSE, 
+           dnn=c('predicted', 'actual'))
+
+```
+
+### Conclusion:
+
+
+We have used the followin procedure and functions:
+
+
+1)Vcorpus()
+2)content_transformer()
+3)tolower()
+4)tm_map()
+5)removeNumbers,removePunctuation
+6)stopwords()
+7)stemDocument()
+8)stripwhitespace()
+9)DocumentTermMatrix()
+10)Wordcloud
+11)subset()
+12)naiveBayes()
+13)CrossTable
+
+
+
+Reference:
+
+Lantz Brett (2015) *Machine Learning with R: Second Edition*
+
+
+
